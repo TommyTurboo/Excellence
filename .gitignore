@@ -1,0 +1,28 @@
+# PlatformIO
+.pio/
+.piolibdeps/
+.clang_complete
+.gcc-flags.json
+
+# VSCode settings
+.vscode/.browse*
+.vscode/c_cpp_properties.json
+.vscode/launch.json
+.vscode/ipch/
+
+# Build files
+*.elf
+*.bin
+*.map
+*.hex
+*.a
+*.o
+*.d
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Secrets (wifi/mqtt keys, passwords)
+secrets.h
+secrets.ini
