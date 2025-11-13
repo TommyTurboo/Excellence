@@ -1,18 +1,18 @@
-# CLAUDE.md - Excellence ESP32 Project Guide
+# CLAUDE.md - Excellence ESP32 Project Gids
 
-## Project Overview
+## Projectoverzicht
 
-**Excellence** is an ESP32-based WiFi mesh + MQTT project for controlling relays, PWM outputs, and reading digital inputs. It integrates with Home Assistant through MQTT, supporting root nodes (directly connected to MQTT broker) and child nodes (communicating via ESP-MESH).
+**Excellence** is een ESP32-gebaseerd WiFi mesh + MQTT project voor het aansturen van relais, PWM-uitgangen en het uitlezen van digitale ingangen. Het integreert met Home Assistant via MQTT en ondersteunt root nodes (direct verbonden met MQTT broker) en child nodes (communicerend via ESP-MESH).
 
-### Quick Facts
+### Snel Overzicht
 - **Platform**: ESP32 (espressif32)
 - **Framework**: ESP-IDF (via PlatformIO)
-- **Language**: C
-- **Flash Size**: 2MB (no OTA)
-- **Primary Use**: Home automation relay/PWM/input control
-- **Communication**: WiFi → MQTT (root nodes), ESP-MESH (child nodes)
+- **Taal**: C
+- **Flash Grootte**: 2MB (geen OTA)
+- **Primair Gebruik**: Domotica relais/PWM/input besturing
+- **Communicatie**: WiFi → MQTT (root nodes), ESP-MESH (child nodes)
 
-## Architecture
+## Architectuur
 
 ### High-Level Flow
 ```
@@ -20,19 +20,19 @@ WiFi ↔ MQTT Broker (Home Assistant)
          ↕
     Root Node (ESP32)
          ↕
-    ESP-MESH Network
+    ESP-MESH Netwerk
          ↕
    Child Nodes (ESP32s)
          ↕
-   Relay/PWM/Input Hardware
+   Relais/PWM/Input Hardware
 ```
 
-### Component Layer Model
+### Component Laag Model
 ```
 ┌─────────────────────────────────────────┐
-│         Application (main.c)             │
+│       Applicatie (main.c)                │
 ├─────────────────────────────────────────┤
-│  Parser → Router → Driver Execution      │
+│  Parser → Router → Driver Executie       │
 ├─────────────────────────────────────────┤
 │  MQTT Link  │  Mesh Link  │  WiFi Link  │
 ├─────────────────────────────────────────┤
@@ -44,47 +44,47 @@ WiFi ↔ MQTT Broker (Home Assistant)
 └─────────────────────────────────────────┘
 ```
 
-## Directory Structure
+## Directory Structuur
 
 ```
 Excellence/
 ├── src/
-│   └── main.c                    # Application entry point
-├── components/                   # Modular ESP-IDF components
-│   ├── cfg_mqtt/                 # MQTT-based config management
-│   ├── config_store/             # NVS-backed configuration storage
-│   ├── input_ctrl/               # Digital input driver (debounced)
-│   ├── mesh_link/                # ESP-MESH communication layer
+│   └── main.c                    # Applicatie startpunt
+├── components/                   # Modulaire ESP-IDF componenten
+│   ├── cfg_mqtt/                 # MQTT-gebaseerd configuratiebeheer
+│   ├── config_store/             # NVS-backed configuratieopslag
+│   ├── input_ctrl/               # Digitale input driver (debounced)
+│   ├── mesh_link/                # ESP-MESH communicatielaag
 │   ├── mqtt_link/                # MQTT client wrapper
-│   ├── parser/                   # JSON → canonical message parser
+│   ├── parser/                   # JSON → canonieke message parser
 │   ├── pwm_ctrl/                 # PWM output driver (LED dimming)
-│   ├── relay_ctrl/               # Relay output driver (auto-off support)
-│   ├── router/                   # Message routing (local/remote/mesh)
-│   └── wifi_link/                # WiFi connection management
-├── include/                      # Project-wide headers (currently empty)
-├── lib/                          # External libraries (currently empty)
-├── test/                         # Unit tests (currently empty)
+│   ├── relay_ctrl/               # Relais output driver (auto-off ondersteuning)
+│   ├── router/                   # Message routing (lokaal/remote/mesh)
+│   └── wifi_link/                # WiFi connectiebeheer
+├── include/                      # Project-wide headers (momenteel leeg)
+├── lib/                          # Externe libraries (momenteel leeg)
+├── test/                         # Unit tests (momenteel leeg)
 ├── partitions/
-│   └── esp32-2mb-noota.csv       # Flash partition table (2MB, no OTA)
-├── platformio.ini                # PlatformIO configuration
-├── secrets_template.ini          # Template for WiFi/MQTT credentials
-├── secrets.ini                   # IGNORED - actual credentials (create from template)
-├── CMakeLists.txt                # ESP-IDF build entry point
-├── sdkconfig.esp32dev            # ESP-IDF SDK configuration
-├── .gitignore                    # Git ignore rules
-└── README.md                     # Basic project README
+│   └── esp32-2mb-noota.csv       # Flash partitietabel (2MB, geen OTA)
+├── platformio.ini                # PlatformIO configuratie
+├── secrets_template.ini          # Template voor WiFi/MQTT credentials
+├── secrets.ini                   # GENEGEERD - echte credentials (maak aan vanuit template)
+├── CMakeLists.txt                # ESP-IDF build startpunt
+├── sdkconfig.esp32dev            # ESP-IDF SDK configuratie
+├── .gitignore                    # Git ignore regels
+└── README.md                     # Basis project README
 ```
 
-## Core Components
+## Core Componenten
 
 ### 1. Parser (`components/parser/`)
-**Purpose**: Converts JSON messages into canonical C structures.
+**Doel**: Converteert JSON berichten naar canonieke C structuren.
 
-**Key Concepts**:
-- Supports multiple field aliases (e.g., `target`, `device`, `dev` → `target_dev`)
-- Validates and normalizes input
-- Generates correlation IDs if missing
-- Error reporting with path and detail
+**Belangrijkste Concepten**:
+- Ondersteunt meerdere veld aliassen (bijv. `target`, `device`, `dev` → `target_dev`)
+- Valideert en normaliseert input
+- Genereert correlatie-ID's indien ontbrekend
+- Foutrapportage met pad en details
 
 **Data Flow**:
 ```
@@ -96,7 +96,7 @@ JSON string → parser_parse() → parser_result_t { ok, msg, error }
 - `io_kind_t`: RELAY, PWM, INPUT
 - `action_t`: ON, OFF, TOGGLE, SET, READ, REPORT
 
-**Example Usage** (from main.c:147-153):
+**Voorbeeldgebruik** (uit main.c:147-153):
 ```c
 parser_meta_t meta = { .source=PARSER_SRC_MQTT, .topic_hint=topic };
 parser_result_t r = parser_parse(json, &meta);
@@ -108,19 +108,19 @@ router_handle(&r.msg);
 ```
 
 ### 2. Router (`components/router/`)
-**Purpose**: Routes parsed messages to local drivers or remote nodes.
+**Doel**: Routeert geparseerde berichten naar lokale drivers of remote nodes.
 
-**Responsibilities**:
-- Determines if message is for local device or remote
-- Calls appropriate driver execution callbacks
-- Publishes MQTT state updates
-- Handles mesh forwarding (for root nodes)
+**Verantwoordelijkheden**:
+- Bepaalt of bericht voor lokaal apparaat of remote is
+- Roept juiste driver execution callbacks aan
+- Publiceert MQTT state updates
+- Handelt mesh forwarding af (voor root nodes)
 
-**Key Functions**:
-- `router_init()`: Initialize with callbacks
-- `router_set_local_dev()`: Set device name
-- `router_handle()`: Process a parsed message
-- `router_emit_event()`: Send events from child nodes
+**Belangrijkste Functies**:
+- `router_init()`: Initialiseer met callbacks
+- `router_set_local_dev()`: Stel apparaatnaam in
+- `router_handle()`: Verwerk een geparseerd bericht
+- `router_emit_event()`: Verstuur events vanaf child nodes
 
 **Status Codes**:
 ```c
@@ -135,45 +135,45 @@ typedef enum {
 ```
 
 ### 3. Config Store (`components/config_store/`)
-**Purpose**: Persistent configuration storage using NVS (Non-Volatile Storage).
+**Doel**: Persistente configuratieopslag met NVS (Non-Volatile Storage).
 
-**Configuration Structure** (`cfg_t`):
+**Configuratie Structuur** (`cfg_t`):
 ```c
-- dev_name[32]              // Device identifier
-- relay_gpio[8]             // GPIO pins for relays (max 8)
-- relay_count               // Number of active relays
-- relay_active_low_mask     // Bitmask for active-low logic
-- relay_open_drain_mask     // Bitmask for open-drain mode
-- relay_autoff_sec[8]       // Auto-off timers per relay
-- pwm_gpio[8]               // GPIO pins for PWM outputs
-- pwm_count                 // Number of PWM channels
-- pwm_inverted_mask         // Bitmask for inverted PWM
-- pwm_freq_hz               // PWM frequency
-- input_gpio[8]             // GPIO pins for inputs
-- input_count               // Number of input channels
-- input_pullup_mask         // Bitmask for pull-up resistors
-- input_pulldown_mask       // Bitmask for pull-down resistors
-- input_inverted_mask       // Bitmask for inverted logic
-- input_debounce_ms[8]      // Debounce time per input
+- dev_name[32]              // Apparaat identifier
+- relay_gpio[8]             // GPIO pins voor relais (max 8)
+- relay_count               // Aantal actieve relais
+- relay_active_low_mask     // Bitmask voor active-low logica
+- relay_open_drain_mask     // Bitmask voor open-drain modus
+- relay_autoff_sec[8]       // Auto-off timers per relais
+- pwm_gpio[8]               // GPIO pins voor PWM uitgangen
+- pwm_count                 // Aantal PWM kanalen
+- pwm_inverted_mask         // Bitmask voor geïnverteerde PWM
+- pwm_freq_hz               // PWM frequentie
+- input_gpio[8]             // GPIO pins voor inputs
+- input_count               // Aantal input kanalen
+- input_pullup_mask         // Bitmask voor pull-up weerstanden
+- input_pulldown_mask       // Bitmask voor pull-down weerstanden
+- input_inverted_mask       // Bitmask voor geïnverteerde logica
+- input_debounce_ms[8]      // Debounce tijd per input
 ```
 
 **API**:
 ```c
-esp_err_t config_init(void);              // Load or create defaults
-const cfg_t* config_get_cached(void);     // Get current config
-esp_err_t config_commit(void);            // Save to NVS
+esp_err_t config_init(void);              // Laad of maak defaults
+const cfg_t* config_get_cached(void);     // Haal huidige config op
+esp_err_t config_commit(void);            // Opslaan naar NVS
 void config_set_relays(int *gpios, int count);
 void config_set_pwm(int *gpios, int count, uint32_t freq_hz);
-// ... and more setters
+// ... en meer setters
 ```
 
 ### 4. Relay Control (`components/relay_ctrl/`)
-**Purpose**: GPIO-based relay control with auto-off timers.
+**Doel**: GPIO-gebaseerde relaisbesturing met auto-off timers.
 
 **Features**:
-- Active-high or active-low logic per channel
-- Open-drain or push-pull mode
-- Per-channel auto-off timers (for pulse applications)
+- Active-high of active-low logica per kanaal
+- Open-drain of push-pull modus
+- Per-kanaal auto-off timers (voor pulse toepassingen)
 - State change callbacks
 
 **API**:
@@ -189,13 +189,13 @@ void relay_ctrl_set_state_hook(void (*hook)(int ch, bool on));
 ```
 
 ### 5. PWM Control (`components/pwm_ctrl/`)
-**Purpose**: PWM output control for LED dimming, motor speed, etc.
+**Doel**: PWM output besturing voor LED dimming, motorsnelheid, etc.
 
 **Features**:
-- 13-bit resolution (0-8191)
-- Hardware fade support
-- Per-channel inversion
-- Configurable frequency
+- 13-bit resolutie (0-8191)
+- Hardware fade ondersteuning
+- Per-kanaal inversie
+- Configureerbare frequentie
 
 **API**:
 ```c
@@ -208,12 +208,12 @@ void pwm_ctrl_set_state_hook(void (*hook)(int ch, uint32_t duty));
 ```
 
 ### 6. Input Control (`components/input_ctrl/`)
-**Purpose**: Debounced digital input reading (buttons, sensors).
+**Doel**: Debounced digitale input uitlezing (knoppen, sensoren).
 
 **Features**:
-- Software debouncing (configurable per channel)
-- Pull-up/pull-down configuration
-- Logic inversion support
+- Software debouncing (configureerbaar per kanaal)
+- Pull-up/pull-down configuratie
+- Logica inversie ondersteuning
 - State change callbacks
 
 **API**:
@@ -227,15 +227,15 @@ void input_ctrl_set_state_hook(void (*hook)(int ch, bool level));
 ```
 
 ### 7. WiFi Link (`components/wifi_link/`)
-**Purpose**: WiFi station mode connection management.
+**Doel**: WiFi station mode connectiebeheer.
 
 **Features**:
 - Auto-reconnect
-- Hostname configuration
-- Power save control
-- Connection callbacks
+- Hostname configuratie
+- Power save besturing
+- Connectie callbacks
 
-**Context Structure**:
+**Context Structuur**:
 ```c
 typedef struct {
     char ssid[32];
@@ -246,51 +246,51 @@ typedef struct {
 ```
 
 ### 8. MQTT Link (`components/mqtt_link/`)
-**Purpose**: MQTT client wrapper with topic management.
+**Doel**: MQTT client wrapper met topic management.
 
-**Topic Structure**:
+**Topic Structuur**:
 ```
 {base_prefix}/{device_name}/Cmd/Set      # Commands (root subscribes)
-{base_prefix}/{device_name}/Config/Set   # Configuration updates
-{base_prefix}/{device_name}/State        # Status publications
+{base_prefix}/{device_name}/Config/Set   # Configuratie updates
+{base_prefix}/{device_name}/State        # Status publicaties
 ```
 
-**Context Structure**:
+**Context Structuur**:
 ```c
 typedef struct {
     char host[64];
     uint16_t port;
-    char base_prefix[32];   // e.g., "Devices"
-    char local_dev[32];     // e.g., "ESP32_ROOT"
+    char base_prefix[32];   // bijv. "Devices"
+    char local_dev[32];     // bijv. "ESP32_ROOT"
     char client_id[32];
     char username[32];
     char password[64];
-    bool is_root;           // true = subscribe to Cmd/Set & Config/Set
+    bool is_root;           // true = subscribe op Cmd/Set & Config/Set
 } mqtt_ctx_t;
 ```
 
 ### 9. Mesh Link (`components/mesh_link/`)
-**Purpose**: ESP-MESH communication for child node forwarding.
+**Doel**: ESP-MESH communicatie voor child node forwarding.
 
-**Status**: Component exists but implementation may be minimal in current main.c.
+**Status**: Component bestaat maar implementatie is mogelijk minimaal in huidige main.c.
 
 ### 10. Config MQTT (`components/cfg_mqtt/`)
-**Purpose**: Runtime configuration via MQTT messages.
+**Doel**: Runtime configuratie via MQTT berichten.
 
 **Features**:
-- Apply full configuration from JSON
-- Forward config to specific devices (root)
+- Toepassen van volledige configuratie vanuit JSON
+- Doorsturen config naar specifieke apparaten (root)
 - ACK/ERROR responses
 
-## Build System
+## Build Systeem
 
-### PlatformIO Configuration
+### PlatformIO Configuratie
 
-**File**: `platformio.ini`
+**Bestand**: `platformio.ini`
 
 ```ini
 [platformio]
-extra_configs = secrets.ini    # External credentials file
+extra_configs = secrets.ini    # Extern credentials bestand
 
 [env:esp32dev]
 platform = espressif32
@@ -301,21 +301,21 @@ monitor_speed = 115200
 board_build.partitions = partitions/esp32-2mb-noota.csv
 ```
 
-### Build Flags (from secrets.ini)
+### Build Flags (uit secrets.ini)
 
-**File**: `secrets_template.ini` → **CREATE** `secrets.ini`
+**Bestand**: `secrets_template.ini` → **MAAK AAN** `secrets.ini`
 
-Required defines:
+Vereiste defines:
 ```ini
 [env:esp32dev]
 build_flags =
-  -DWIFI_SSID="your_wifi_ssid"
-  -DWIFI_PASS="your_wifi_password"
+  -DWIFI_SSID="jouw_wifi_ssid"
+  -DWIFI_PASS="jouw_wifi_wachtwoord"
   -DMQTT_HOST="192.168.1.100"
   -DMQTT_PORT=1883
   -DMQTT_CLIENT_ID="ESP32_ROOT"
-  -DMQTT_USER="mqtt_user"
-  -DMQTT_PASS="mqtt_password"
+  -DMQTT_USER="mqtt_gebruiker"
+  -DMQTT_PASS="mqtt_wachtwoord"
   -DCONFIG_MESH_CHANNEL=6
   -DCONFIG_MESH_AP_CONNECTIONS=6
   -DCONFIG_MESH_ID_0=0x11
@@ -326,10 +326,10 @@ build_flags =
 
 ## Development Workflows
 
-### Initial Setup
+### Initiële Setup
 
-1. **Install Prerequisites**:
-   - VS Code + PlatformIO extension
+1. **Installeer Vereisten**:
+   - VS Code + PlatformIO extensie
    - Git
 
 2. **Clone Repository**:
@@ -338,10 +338,10 @@ build_flags =
    cd Excellence
    ```
 
-3. **Configure Secrets**:
+3. **Configureer Secrets**:
    ```bash
    cp secrets_template.ini secrets.ini
-   # Edit secrets.ini with actual credentials
+   # Bewerk secrets.ini met echte credentials
    ```
 
 4. **Build & Upload**:
@@ -350,53 +350,53 @@ build_flags =
    pio device monitor -b 115200
    ```
 
-### Common Development Tasks
+### Veelvoorkomende Development Taken
 
-#### Adding a New Component
+#### Toevoegen van Nieuw Component
 
-1. Create component directory:
+1. Maak component directory:
    ```bash
    mkdir -p components/my_component/include
    mkdir -p components/my_component
    ```
 
-2. Add `CMakeLists.txt` in component folder:
+2. Voeg `CMakeLists.txt` toe in component map:
    ```cmake
    idf_component_register(
        SRCS "my_component.c"
        INCLUDE_DIRS "include"
-       REQUIRES esp_log  # add dependencies
+       REQUIRES esp_log  # voeg dependencies toe
    )
    ```
 
-3. Create header in `include/my_component.h`
-4. Create implementation in `my_component.c`
-5. Include in `src/main.c` or other components
+3. Maak header in `include/my_component.h`
+4. Maak implementatie in `my_component.c`
+5. Include in `src/main.c` of andere componenten
 
-#### Modifying Configuration Schema
+#### Wijzigen van Configuratie Schema
 
-1. Edit `components/config_store/include/config_store.h` (`cfg_t` struct)
+1. Bewerk `components/config_store/include/config_store.h` (`cfg_t` struct)
 2. Update `config_reset_defaults()` in `config_store.c`
-3. Add getter/setter functions
-4. Update NVS save/load logic
-5. **Important**: Consider version migration for existing devices
+3. Voeg getter/setter functies toe
+4. Update NVS save/load logica
+5. **Belangrijk**: Overweeg versie migratie voor bestaande apparaten
 
-#### Adding a New Command/Action
+#### Toevoegen van Nieuw Command/Action
 
-1. **Parser**: Add enum to `action_t` or `io_kind_t` in `parser.h`
-2. **Parser**: Update alias tables in `parser.c`
-3. **Router**: Add execution callback to `router_cbs_t`
-4. **Main**: Implement exec function (e.g., `exec_new_feature()`)
-5. **Main**: Register callback in `hook_router_init()`
+1. **Parser**: Voeg enum toe aan `action_t` of `io_kind_t` in `parser.h`
+2. **Parser**: Update alias tabellen in `parser.c`
+3. **Router**: Voeg execution callback toe aan `router_cbs_t`
+4. **Main**: Implementeer exec functie (bijv. `exec_new_feature()`)
+5. **Main**: Registreer callback in `hook_router_init()`
 
-#### Testing Changes
+#### Testen van Wijzigingen
 
-**Current State**: No automated tests present.
+**Huidige Staat**: Geen geautomatiseerde tests aanwezig.
 
-**Manual Testing Approach**:
-1. Use serial monitor to observe logs
-2. Send MQTT messages to `Devices/{device}/Cmd/Set`
-3. Example MQTT command:
+**Handmatige Test Aanpak**:
+1. Gebruik serial monitor om logs te observeren
+2. Verstuur MQTT berichten naar `Devices/{device}/Cmd/Set`
+3. Voorbeeld MQTT commando:
    ```json
    {
      "target_dev": "ESP32_ROOT",
@@ -405,58 +405,58 @@ build_flags =
      "action": "TOGGLE"
    }
    ```
-4. Check `Devices/{device}/State` for responses
+4. Controleer `Devices/{device}/State` voor responses
 
-**Test Code**: main.c contains extensive commented-out test code (lines 242-851):
-- Parser tests (line 536)
-- Router tests (line 413)
-- Config tests (line 604)
-- Driver tests (relay: 826, PWM: 801, input: 753)
+**Test Code**: main.c bevat uitgebreide uitgecommen testcode (regels 242-851):
+- Parser tests (regel 536)
+- Router tests (regel 413)
+- Config tests (regel 604)
+- Driver tests (relais: 826, PWM: 801, input: 753)
 
-**To use test code**: Comment out production `app_main()`, uncomment desired test section.
+**Om testcode te gebruiken**: Comment productie `app_main()` uit, uncomment gewenste test sectie.
 
-## Key Conventions
+## Belangrijkste Conventies
 
-### Code Style
+### Code Stijl
 
-1. **Naming**:
-   - Component functions: `component_action()` (e.g., `relay_ctrl_on()`)
-   - Static functions: `snake_case`
-   - Types: `snake_case_t` (e.g., `parser_msg_t`)
-   - Enums: `UPPER_CASE` values
+1. **Naamgeving**:
+   - Component functies: `component_action()` (bijv. `relay_ctrl_on()`)
+   - Static functies: `snake_case`
+   - Types: `snake_case_t` (bijv. `parser_msg_t`)
+   - Enums: `UPPER_CASE` waarden
 
 2. **Error Handling**:
-   - Use `ESP_ERROR_CHECK()` for critical operations
-   - Return `esp_err_t` or custom status enums
-   - Log with ESP_LOG macros (`ESP_LOGI`, `ESP_LOGW`, `ESP_LOGE`)
+   - Gebruik `ESP_ERROR_CHECK()` voor kritieke operaties
+   - Return `esp_err_t` of custom status enums
+   - Log met ESP_LOG macros (`ESP_LOGI`, `ESP_LOGW`, `ESP_LOGE`)
 
 3. **Memory Management**:
-   - Prefer stack allocation for small structs
-   - Use `cJSON_Delete()` after `cJSON_Parse()`
-   - Free allocated strings from `cJSON_PrintUnformatted()`
+   - Geef voorkeur aan stack allocatie voor kleine structs
+   - Gebruik `cJSON_Delete()` na `cJSON_Parse()`
+   - Free gealloceerde strings van `cJSON_PrintUnformatted()`
 
 4. **Logging**:
-   - Define `TAG` constant per file: `static const char *TAG = "COMPONENT";`
-   - Use context in logs: `ESP_LOGI(TAG, "Relay %d -> %s", ch, on?"ON":"OFF");`
+   - Definieer `TAG` constante per bestand: `static const char *TAG = "COMPONENT";`
+   - Gebruik context in logs: `ESP_LOGI(TAG, "Relay %d -> %s", ch, on?"ON":"OFF");`
 
-### Component Design Principles
+### Component Design Principes
 
 1. **Separation of Concerns**:
-   - Each component has single responsibility
-   - Clear interfaces via header files
-   - Minimal dependencies
+   - Elk component heeft één verantwoordelijkheid
+   - Duidelijke interfaces via header bestanden
+   - Minimale dependencies
 
 2. **Callback-Based Integration**:
-   - Drivers use callbacks for state changes
-   - Router uses callbacks for execution
-   - Enables loose coupling
+   - Drivers gebruiken callbacks voor state changes
+   - Router gebruikt callbacks voor executie
+   - Maakt loose coupling mogelijk
 
 3. **Configuration-Driven**:
-   - Hardware mapping via config (not hardcoded)
-   - Runtime reconfiguration supported
-   - Persistent storage in NVS
+   - Hardware mapping via config (niet hardcoded)
+   - Runtime herconfiguratie ondersteund
+   - Persistente opslag in NVS
 
-### MQTT Message Format
+### MQTT Bericht Formaat
 
 **Command** (`/Cmd/Set`):
 ```json
@@ -466,14 +466,14 @@ build_flags =
   "io_id": 0,
   "action": "ON",
   "duration_ms": 5000,
-  "corr_id": "optional-uuid"
+  "corr_id": "optioneel-uuid"
 }
 ```
 
 **State** (`/State`):
 ```json
 {
-  "corr_id": "matching-uuid",
+  "corr_id": "bijpassend-uuid",
   "dev": "ESP32_A",
   "status": "OK",
   "io_kind": "RELAY",
@@ -485,113 +485,113 @@ build_flags =
 **Error** (`/State`):
 ```json
 {
-  "corr_id": "matching-uuid",
+  "corr_id": "bijpassend-uuid",
   "dev": "ESP32_A",
   "status": "ERROR",
   "code": "OUT_OF_RANGE",
   "path": "io_id",
-  "detail": "io_id=99 exceeds relay_count=4"
+  "detail": "io_id=99 overschrijdt relay_count=4"
 }
 ```
 
-### Field Aliases (Parser)
+### Veld Aliassen (Parser)
 
-The parser supports multiple JSON field names for flexibility:
+De parser ondersteunt meerdere JSON veldnamen voor flexibiliteit:
 
-| Canonical Field | Accepted Aliases |
-|-----------------|------------------|
+| Canoniek Veld | Geaccepteerde Aliassen |
+|---------------|------------------------|
 | `target_dev` | `target`, `device`, `dev` |
 | `io_kind` | `io`, `type`, `kind` |
 | `io_id` | `gpio`, `pin`, `channel`, `ch`, `id` |
 | `action` | `command`, `cmd`, `act` |
-| `duration_ms` | `seconds`, `minutes` (auto-converted) |
+| `duration_ms` | `seconds`, `minutes` (auto-geconverteerd) |
 | `brightness_pct` | `brightness`, `duty`, `level`, `pct` |
 | `ramp_ms` | `ramp`, `fade`, `transition` |
 
-## Application Flow (main.c)
+## Applicatie Flow (main.c)
 
-### Startup Sequence
+### Opstart Sequentie
 
 ```c
 void app_main(void) {
-    // 1. Initialize NVS and load config
+    // 1. Initialiseer NVS en laad config
     config_init();
     const cfg_t *cfg = config_get_cached();
 
-    // 2. Initialize drivers with config
+    // 2. Initialiseer drivers met config
     relay_ctrl_init(cfg->relay_gpio, cfg->relay_count, ...);
     pwm_ctrl_init(cfg->pwm_gpio, cfg->pwm_count, ...);
     input_ctrl_init(cfg->input_gpio, cfg->input_count, ...);
 
-    // 3. Set driver parameters from config
+    // 3. Stel driver parameters in vanuit config
     for (int i=0; i<cfg->relay_count; ++i)
         relay_ctrl_set_autoff_seconds(i, cfg->relay_autoff_sec[i]);
-    // ... similar for PWM, input
+    // ... vergelijkbaar voor PWM, input
 
-    // 4. Start WiFi (triggers on_ip callback on success)
+    // 4. Start WiFi (triggert on_ip callback bij succes)
     wifi_link_init(&w, &cb);
     wifi_link_start();
 }
 ```
 
-### Runtime Flow (after WiFi connects)
+### Runtime Flow (na WiFi connectie)
 
 ```c
 on_ip() {
-    // 1. Initialize MQTT client
+    // 1. Initialiseer MQTT client
     mqtt_link_init(&m, &cbs);
 
-    // 2. Initialize router
+    // 2. Initialiseer router
     hook_router_init(MQTT_CLIENT_ID);
 }
 
 on_cmd_set(json, topic) {
-    // 1. Parse JSON → canonical msg
+    // 1. Parse JSON → canoniek msg
     parser_result_t r = parser_parse(json, &meta);
 
-    // 2. Handle with router
+    // 2. Handle met router
     router_handle(&r.msg);
         ↓
-    // 3. Router calls exec_relay/exec_pwm/exec_input
+    // 3. Router roept exec_relay/exec_pwm/exec_input aan
     exec_relay(msg) → relay_ctrl_on/off/toggle()
         ↓
-    // 4. Router publishes State response via MQTT
+    // 4. Router publiceert State response via MQTT
 }
 ```
 
-## Important Notes for AI Assistants
+## Belangrijke Notities voor AI Assistenten
 
-### When Making Changes
+### Bij Maken van Wijzigingen
 
-1. **Always check config schema**: Hardware mapping is config-driven, not hardcoded.
-2. **Preserve error handling**: ESP32 development requires robust error checks.
-3. **Maintain logging**: Serial logs are primary debug mechanism.
-4. **Test with actual hardware**: Embedded systems can't be fully simulated.
-5. **Watch memory usage**: ESP32 has limited RAM (~520KB total, less available).
-6. **Avoid blocking operations**: FreeRTOS tasks should yield regularly.
+1. **Controleer altijd config schema**: Hardware mapping is config-driven, niet hardcoded.
+2. **Behoud error handling**: ESP32 ontwikkeling vereist robuuste error checks.
+3. **Onderhoud logging**: Seriële logs zijn primair debug mechanisme.
+4. **Test met echte hardware**: Embedded systemen kunnen niet volledig gesimuleerd worden.
+5. **Let op geheugengebruik**: ESP32 heeft beperkt RAM (~520KB totaal, minder beschikbaar).
+6. **Vermijd blocking operaties**: FreeRTOS tasks moeten regelmatig yielden.
 
-### Security Considerations
+### Beveiligingsoverwegingen
 
-1. **secrets.ini is gitignored**: Never commit credentials.
-2. **MQTT authentication**: Currently supported but optional.
-3. **No TLS**: MQTT connection is plaintext (consider adding mbedTLS).
-4. **No authorization**: Any valid MQTT message is executed.
-5. **Command injection**: JSON parser validates types, but no input sanitization for downstream systems.
+1. **secrets.ini is gitignored**: Commit nooit credentials.
+2. **MQTT authenticatie**: Momenteel ondersteund maar optioneel.
+3. **Geen TLS**: MQTT connectie is plaintext (overweeg toevoegen mbedTLS).
+4. **Geen autorisatie**: Elk geldig MQTT bericht wordt uitgevoerd.
+5. **Command injection**: JSON parser valideert types, maar geen input sanitization voor downstream systemen.
 
-### Performance Considerations
+### Performance Overwegingen
 
-1. **Flash is limited (2MB)**: No OTA partition to save space.
-2. **WiFi power save disabled**: For better MQTT latency.
-3. **MQTT QoS 1**: Ensures message delivery (at-least-once).
-4. **No retain on State**: Reduces broker memory usage.
+1. **Flash is beperkt (2MB)**: Geen OTA partitie om ruimte te besparen.
+2. **WiFi power save uitgeschakeld**: Voor betere MQTT latency.
+3. **MQTT QoS 1**: Garandeert berichtaflevering (at-least-once).
+4. **Geen retain op State**: Vermindert broker geheugengebruik.
 
-### Known Limitations
+### Bekende Beperkingen
 
-1. **No OTA updates**: Requires physical access for firmware updates.
-2. **No mesh implementation in main.c**: Mesh components exist but not fully integrated.
-3. **No unit tests**: All testing is manual/integration.
-4. **No web interface**: Configuration only via MQTT or NVS.
-5. **Single MQTT broker**: No failover or multi-broker support.
+1. **Geen OTA updates**: Vereist fysieke toegang voor firmware updates.
+2. **Geen mesh implementatie in main.c**: Mesh componenten bestaan maar niet volledig geïntegreerd.
+3. **Geen unit tests**: Alle testing is handmatig/integratie.
+4. **Geen web interface**: Configuratie alleen via MQTT of NVS.
+5. **Enkele MQTT broker**: Geen failover of multi-broker ondersteuning.
 
 ## Debugging Tips
 
@@ -601,106 +601,106 @@ on_cmd_set(json, topic) {
 pio device monitor -b 115200
 ```
 
-**Key logs to watch**:
-- `[WIFI]`: Connection status
-- `[MQTT]`: Broker connection, pub/sub activity
-- `[MQ_RX]`: Incoming MQTT messages
-- `[PARSER]`: JSON parsing errors
-- `[EXEC]`: Driver execution
-- `[CFG]`: Configuration changes
+**Belangrijke logs om te volgen**:
+- `[WIFI]`: Connectie status
+- `[MQTT]`: Broker connectie, pub/sub activiteit
+- `[MQ_RX]`: Inkomende MQTT berichten
+- `[PARSER]`: JSON parsing fouten
+- `[EXEC]`: Driver executie
+- `[CFG]`: Configuratie wijzigingen
 
-### Common Issues
+### Veelvoorkomende Problemen
 
-1. **WiFi won't connect**: Check `WIFI_SSID` and `WIFI_PASS` in secrets.ini
-2. **MQTT not connecting**: Verify `MQTT_HOST`, port, credentials
-3. **Commands ignored**: Check `target_dev` matches `MQTT_CLIENT_ID`
-4. **Relay not switching**: Verify GPIO mapping, active_low_mask, wiring
-5. **PWM not visible**: Check frequency, duty cycle, hardware connection
-6. **Input always reads same**: Check pull resistors, inverted_mask, debounce
+1. **WiFi maakt geen verbinding**: Controleer `WIFI_SSID` en `WIFI_PASS` in secrets.ini
+2. **MQTT maakt geen verbinding**: Verifieer `MQTT_HOST`, poort, credentials
+3. **Commando's genegeerd**: Controleer of `target_dev` overeenkomt met `MQTT_CLIENT_ID`
+4. **Relais schakelt niet**: Verifieer GPIO mapping, active_low_mask, bedrading
+5. **PWM niet zichtbaar**: Controleer frequentie, duty cycle, hardware connectie
+6. **Input leest altijd hetzelfde**: Controleer pull weerstanden, inverted_mask, debounce
 
-### Using Test Code
+### Gebruik van Test Code
 
-The extensive test code in main.c (commented out) is valuable:
+De uitgebreide testcode in main.c (uitgecommen) is waardevol:
 
-1. **To test parser**:
-   - Comment out production `app_main()` (line 209-238)
-   - Uncomment parser test (line 579-601)
+1. **Om parser te testen**:
+   - Comment productie `app_main()` uit (regel 209-238)
+   - Uncomment parser test (regel 579-601)
    - Build & monitor serial output
 
-2. **To test drivers**:
-   - Uncomment relevant test (relay: 836, PWM: 812, input: 761)
-   - Adjust GPIO pins to match your hardware
-   - Build & observe behavior
+2. **Om drivers te testen**:
+   - Uncomment relevante test (relais: 836, PWM: 812, input: 761)
+   - Pas GPIO pins aan naar jouw hardware
+   - Build & observeer gedrag
 
 ## Git Workflow
 
-### Branching Strategy
+### Branching Strategie
 
-- **Main branch**: Stable releases
+- **Main branch**: Stabiele releases
 - **Feature branches**: `claude/claude-md-*` (AI-assisted development)
 
-### Current Branch
+### Huidige Branch
 
 ```
 claude/claude-md-mhxw6n9spbm3z1om-01SR2RwNciiMtq3CbCwdm25P
 ```
 
-All development should occur on this branch until ready for PR.
+Alle development moet op deze branch plaatsvinden tot klaar voor PR.
 
-### Committing
+### Committen
 
-1. **Stage changes**: Typically via PlatformIO/VS Code UI
-2. **Descriptive messages**: Explain "why", not just "what"
-3. **Test before commit**: At minimum, ensure build succeeds
-4. **Push regularly**: `git push -u origin <branch-name>`
+1. **Stage wijzigingen**: Typisch via PlatformIO/VS Code UI
+2. **Beschrijvende berichten**: Leg "waarom" uit, niet alleen "wat"
+3. **Test voor commit**: Op z'n minst, zorg dat build slaagt
+4. **Push regelmatig**: `git push -u origin <branch-name>`
 
-### .gitignore Rules
+### .gitignore Regels
 
-- `secrets.ini`: Contains credentials
+- `secrets.ini`: Bevat credentials
 - `.pio/`: PlatformIO build artifacts
 - Build outputs: `.elf`, `.bin`, `.map`, etc.
 - VSCode internals: `.vscode/ipch/`, `.vscode/c_cpp_properties.json`
 
-## Integration with Home Assistant
+## Integratie met Home Assistant
 
 ### Discovery
 
-Devices don't auto-discover. Manual MQTT sensor/switch configuration required.
+Apparaten discoveren niet automatisch. Handmatige MQTT sensor/switch configuratie vereist.
 
-### Example HA Configuration
+### Voorbeeld HA Configuratie
 
 ```yaml
 # configuration.yaml
 switch:
   - platform: mqtt
-    name: "Garage Relay 0"
+    name: "Garage Relais 0"
     state_topic: "Devices/ESP32_ROOT/State"
     command_topic: "Devices/ESP32_ROOT/Cmd/Set"
     payload_on: '{"target_dev":"ESP32_ROOT","io_kind":"RELAY","io_id":0,"action":"ON"}'
     payload_off: '{"target_dev":"ESP32_ROOT","io_kind":"RELAY","io_id":0,"action":"OFF"}'
-    value_template: '{{ value_json.state if value_json.io_id == 0 else states("switch.garage_relay_0") }}'
+    value_template: '{{ value_json.state if value_json.io_id == 0 else states("switch.garage_relais_0") }}'
     optimistic: false
 ```
 
-## Future Enhancement Ideas
+## Toekomstige Verbeteringen
 
-1. **OTA Support**: Larger flash or external storage
-2. **Web UI**: ESP32 web server for local config
-3. **Mesh Integration**: Fully implement child node forwarding
-4. **TLS/Encryption**: Secure MQTT with mbedTLS
-5. **Authorization**: Role-based command filtering
-6. **Metrics**: Uptime, memory usage, command stats
-7. **Event Streaming**: Continuous input monitoring
-8. **Home Assistant Discovery**: Auto-configure entities
-9. **Backup/Restore**: Export/import full configuration
-10. **Unit Tests**: Automated testing framework
+1. **OTA Ondersteuning**: Grotere flash of externe opslag
+2. **Web UI**: ESP32 webserver voor lokale config
+3. **Mesh Integratie**: Volledig implementeren child node forwarding
+4. **TLS/Encryptie**: Beveilig MQTT met mbedTLS
+5. **Autorisatie**: Role-based command filtering
+6. **Metrics**: Uptime, geheugengebruik, commando statistieken
+7. **Event Streaming**: Continue input monitoring
+8. **Home Assistant Discovery**: Auto-configureer entities
+9. **Backup/Restore**: Export/import volledige configuratie
+10. **Unit Tests**: Geautomatiseerd testing framework
 
-## Quick Reference
+## Snelle Referentie
 
-### Build Commands
+### Build Commando's
 
 ```bash
-# Full build
+# Volledige build
 pio run -e esp32dev
 
 # Upload firmware
@@ -716,25 +716,25 @@ pio run -e esp32dev -t clean
 pio run -e esp32dev -t upload && pio device monitor -b 115200
 ```
 
-### File Locations Reference
+### Bestandslocatie Referentie
 
-| Purpose | Location |
-|---------|----------|
-| Application entry | `src/main.c` |
-| Parser logic | `components/parser/parser.c` |
-| Router logic | `components/router/router.c` |
-| Config storage | `components/config_store/config_store.c` |
-| Relay driver | `components/relay_ctrl/relay_ctrl.c` |
+| Doel | Locatie |
+|------|---------|
+| Applicatie startpunt | `src/main.c` |
+| Parser logica | `components/parser/parser.c` |
+| Router logica | `components/router/router.c` |
+| Config opslag | `components/config_store/config_store.c` |
+| Relais driver | `components/relay_ctrl/relay_ctrl.c` |
 | PWM driver | `components/pwm_ctrl/pwm_ctrl.c` |
 | Input driver | `components/input_ctrl/input_ctrl.c` |
-| WiFi management | `components/wifi_link/wifi_link.c` |
+| WiFi beheer | `components/wifi_link/wifi_link.c` |
 | MQTT client | `components/mqtt_link/mqtt_link.c` |
 | Credentials | `secrets.ini` (gitignored) |
-| Partition table | `partitions/esp32-2mb-noota.csv` |
+| Partitietabel | `partitions/esp32-2mb-noota.csv` |
 
 ---
 
-**Last Updated**: 2025-11-13
-**Project Version**: Initial development
-**Maintained By**: TommyTurboo
-**AI Assistant**: Optimized for Claude Code understanding
+**Laatst Bijgewerkt**: 2025-11-13
+**Project Versie**: Initiële ontwikkeling
+**Beheerd Door**: TommyTurboo
+**AI Assistent**: Geoptimaliseerd voor Claude Code begrip
