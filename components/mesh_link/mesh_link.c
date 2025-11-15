@@ -2,10 +2,13 @@
 // Dunne façade: API → backend vtable (géén esp_* includes hier)
 #include "mesh_link.h"
 
+
+
 typedef struct {
     const char* (*name)(void);
     void (*init)(const mesh_opts_t*);
     void (*register_rx)(mesh_request_cb_t, mesh_event_cb_t);
+    void (*register_root)(mesh_root_cb_t);
     mesh_status_t (*request)(const mesh_envelope_t*, uint32_t);
     mesh_status_t (*send_event)(const mesh_envelope_t*);
     cJSON* (*snapshot)(void);
@@ -36,6 +39,11 @@ void mesh_init(const mesh_opts_t *opts) {
 void mesh_register_rx(mesh_request_cb_t on_request, mesh_event_cb_t on_event) {
     if (!B) B = pick_backend();
     B->register_rx(on_request, on_event);
+}
+
+void mesh_register_root_cb(mesh_root_cb_t cb) {
+    if (!B) B = pick_backend();
+    if (B->register_root) B->register_root(cb);
 }
 
 mesh_status_t mesh_request(const mesh_envelope_t *req, uint32_t timeout_ms) {

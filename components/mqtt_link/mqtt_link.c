@@ -6,6 +6,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include "cJSON.h"
 
 static const char *TAG = "mqtt_link";
 
@@ -25,6 +26,11 @@ static volatile bool g_connected = false;
 // eenvoudige ringbuffer
 static queued_msg_t *Q = NULL;
 static int Q_cap = 0, Q_head = 0, Q_tail = 0, Q_count = 0;
+
+// extra wildcard subscriptions (app-provided)
+typedef struct { char *topic; int qos; mqtt_rx_cb cb; } extra_sub_t;
+static extra_sub_t EXTRA[6];
+static int EXTRA_N = 0;
 
 static inline uint64_t now_ms_fallback(void){
     return (uint64_t)(esp_timer_get_time() / 1000ULL);
@@ -113,6 +119,14 @@ static void do_subscriptions(void){
     int s1 = esp_mqtt_client_subscribe(g_client, topic1, 1);
     int s2 = esp_mqtt_client_subscribe(g_client, topic2, 1);
     ESP_LOGI(TAG, "subscribed: %s (%d), %s (%d)", topic1, s1, topic2, s2);
+
+    // extra app subscriptions
+    for (int i=0;i<EXTRA_N;i++){
+        if (EXTRA[i].topic && EXTRA[i].cb){
+            int sid = esp_mqtt_client_subscribe(g_client, EXTRA[i].topic, EXTRA[i].qos);
+            ESP_LOGI(TAG, "subscribed: %s (%d)", EXTRA[i].topic, sid);
+        }
+    }
 }
 
 static bool topic_endswith(const char *topic, const char *suffix){
@@ -162,6 +176,10 @@ static void mqtt_event_handler(void *handler_args, esp_event_base_t base, int32_
         memcpy(d, e->data,  e->data_len);  d[e->data_len]  = 0;
         ESP_LOGI(TAG, "RX [%s] %.*s", t, (int)(e->data_len>512?512:e->data_len), d);
         route_rx_message(t, d);
+        // deliver to any extra subscribers
+        for (int i=0;i<EXTRA_N;i++){
+            if (EXTRA[i].cb) EXTRA[i].cb(t, d);
+        }
         free(t); free(d);
         break;
     }
@@ -235,6 +253,16 @@ bool mqtt_link_connected(void){
     return g_connected;
 }
 
+void mqtt_link_shutdown(void){
+    // stop en vernietig de client; behoud offline queue in geheugen
+    if (g_client) {
+        esp_mqtt_client_stop(g_client);
+        esp_mqtt_client_destroy(g_client);
+        g_client = NULL;
+    }
+    g_connected = false;
+}
+
 bool mqtt_link_publish(const char *topic, const char *payload, int qos, bool retain){
     if (!topic || !payload) return false;
     if (g_connected && g_client) {
@@ -250,4 +278,38 @@ void mqtt_link_publish_cb(const char *topic, const char *payload, int qos, bool 
     if (!g_client) return;
     int mid = esp_mqtt_client_publish(g_client, topic, payload, 0, qos, retain);
     ESP_LOGI(TAG, "TX [%s] id=%d %s", topic, mid, payload ? payload : "");
+}
+
+void mesh_diag_publish_route_table(const char *event, const cJSON *snapshot){
+  cJSON *o = cJSON_CreateObject();
+  cJSON_AddStringToObject(o, "event", event);
+  cJSON_AddItemToObject(o, "list", cJSON_Duplicate(snapshot, 1));
+  char *js = cJSON_PrintUnformatted(o);
+  mqtt_link_publish("Mesh/RouteTable", js, 0, true);
+  free(js);
+  cJSON_Delete(o);
+}
+
+void mesh_diag_publish_status(const char *dev, bool online){
+    if (!dev || !*dev) return;
+    char topic[128], payload[160];
+    const char *base = (G.base_prefix[0] ? G.base_prefix : "Devices");
+    snprintf(topic, sizeof(topic), "%s/%s/Status", base, dev);
+    if (online) snprintf(payload, sizeof(payload), "{\"status\":\"online\",\"dev\":\"%s\"}", dev);
+    else        snprintf(payload, sizeof(payload), "{\"status\":\"offline\"}");
+    mqtt_link_publish(topic, payload, 1, true); // retained
+}
+
+bool mqtt_link_subscribe_extra(const char *topic, int qos, mqtt_rx_cb cb){
+    if (!topic || !*topic || !cb) return false;
+    if (EXTRA_N >= (int)(sizeof(EXTRA)/sizeof(EXTRA[0]))) return false;
+    EXTRA[EXTRA_N].topic = strdup(topic);
+    EXTRA[EXTRA_N].qos   = qos;
+    EXTRA[EXTRA_N].cb    = cb;
+    EXTRA_N++;
+    if (g_connected && g_client){
+        int sid = esp_mqtt_client_subscribe(g_client, topic, qos);
+        ESP_LOGI(TAG, "subscribed (late): %s (%d)", topic, sid);
+    }
+    return true;
 }

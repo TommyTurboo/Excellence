@@ -9,6 +9,10 @@
 #include <string.h>
 #include <stdio.h>
 #include <inttypes.h>
+#include "esp_system.h"   // voor esp_restart()
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"     // vTaskDelay, pdMS_TO_TICKS
+#include "router.h"
 
 #define LENOF(a) ((int)(sizeof(a)/sizeof((a)[0])))
 
@@ -145,6 +149,71 @@ static int read_i32_array(cJSON *arr, int *out, int maxn){
     return n;
 }
 
+// Bouw HELLO payload met samenvatting van de actuele IO-mapping
+static void cfg_emit_hello_now(const cfg_t *cfg){
+    if (!cfg) return;
+
+    cJSON *h = cJSON_CreateObject();
+    cJSON_AddStringToObject(h, "type", "HELLO");
+
+    // optioneel: naam als info-blok
+    cJSON *dev = cJSON_CreateObject();
+    cJSON_AddStringToObject(dev, "name", cfg->dev_name);
+    cJSON_AddItemToObject(h, "device", dev);
+
+    // korte samenvatting
+    cJSON_AddNumberToObject(h, "relay_count", cfg->relay_count);
+    cJSON_AddNumberToObject(h, "pwm_count",   cfg->pwm_count);
+    cJSON_AddNumberToObject(h, "input_count", cfg->input_count);
+
+    // relays
+    cJSON *rel = cJSON_CreateObject();
+    cJSON_AddNumberToObject(rel, "count", cfg->relay_count);
+    cJSON_AddNumberToObject(rel, "active_low_mask", cfg->relay_active_low_mask);
+    cJSON_AddNumberToObject(rel, "open_drain_mask", cfg->relay_open_drain_mask);
+    cJSON *rel_gpio = cJSON_CreateArray();
+    for (int i=0;i<cfg->relay_count;i++) cJSON_AddItemToArray(rel_gpio, cJSON_CreateNumber(cfg->relay_gpio[i]));
+    cJSON_AddItemToObject(rel, "gpio", rel_gpio);
+    cJSON *rel_aut = cJSON_CreateArray();
+    for (int i=0;i<cfg->relay_count;i++) cJSON_AddItemToArray(rel_aut, cJSON_CreateNumber((int)cfg->relay_autoff_sec[i]));
+    cJSON_AddItemToObject(rel, "autoff_sec", rel_aut);
+    cJSON_AddItemToObject(h, "relays", rel);
+
+    // pwm
+    cJSON *pwm = cJSON_CreateObject();
+    cJSON_AddNumberToObject(pwm, "count", cfg->pwm_count);
+    cJSON_AddNumberToObject(pwm, "inverted_mask", cfg->pwm_inverted_mask);
+    cJSON_AddNumberToObject(pwm, "freq_hz", cfg->pwm_freq_hz);
+    cJSON *pwm_gpio = cJSON_CreateArray();
+    for (int i=0;i<cfg->pwm_count;i++) cJSON_AddItemToArray(pwm_gpio, cJSON_CreateNumber(cfg->pwm_gpio[i]));
+    cJSON_AddItemToObject(pwm, "gpio", pwm_gpio);
+    cJSON_AddItemToObject(h, "pwm", pwm);
+
+    // inputs
+    cJSON *in = cJSON_CreateObject();
+    cJSON_AddNumberToObject(in, "count", cfg->input_count);
+    cJSON_AddNumberToObject(in, "pullup_mask",   cfg->input_pullup_mask);
+    cJSON_AddNumberToObject(in, "pulldown_mask", cfg->input_pulldown_mask);
+    cJSON_AddNumberToObject(in, "inverted_mask", cfg->input_inverted_mask);
+    cJSON *in_gpio = cJSON_CreateArray();
+    for (int i=0;i<cfg->input_count;i++) cJSON_AddItemToArray(in_gpio, cJSON_CreateNumber(cfg->input_gpio[i]));
+    cJSON_AddItemToObject(in, "gpio", in_gpio);
+    cJSON *in_db = cJSON_CreateArray();
+    for (int i=0;i<cfg->input_count;i++) cJSON_AddItemToArray(in_db, cJSON_CreateNumber((int)cfg->input_debounce_ms[i]));
+    cJSON_AddItemToObject(in, "debounce_ms", in_db);
+    cJSON_AddItemToObject(h, "inputs", in);
+
+    // via mesh naar root → root publiceert retained Info
+    router_emit_event(ML_KIND_DIAG, /*corr_id*/0, /*origin*/NULL, h);
+    cJSON_Delete(h);
+}
+
+
+void cfg_publish_hello_now(void){
+    const cfg_t *cfg = config_get_cached();
+    if (cfg) cfg_emit_hello_now(cfg);
+}
+
 void cfg_mqtt_handle(const char *json, const char *local_dev)
 {
     if (!json || !local_dev || !*local_dev) return;
@@ -174,14 +243,19 @@ void cfg_mqtt_handle(const char *json, const char *local_dev)
 
     cfg_t tmp = *cur;   // start van huidige config
     bool any_change = false;
+    bool name_changed = false;
+    char old_name[sizeof(tmp.dev_name)];
+    strlcpy(old_name, tmp.dev_name, sizeof(old_name));
 
     // ===== device =====
     cJSON *device = cJSON_GetObjectItemCaseSensitive(root, "device");
     if (cJSON_IsObject(device)) {
         char name[LENOF(tmp.dev_name) ? LENOF(tmp.dev_name) : 64]; // fallback
         if (read_opt_str(device, "name", name, sizeof(name))) {
-            // dev_name aanpassen (truncate door snprintf)
-            snprintf(tmp.dev_name, sizeof(tmp.dev_name), "%s", name);
+            if (strcmp(tmp.dev_name, name) != 0) {
+                snprintf(tmp.dev_name, sizeof(tmp.dev_name), "%s", name);
+                name_changed = true;
+            }
             any_change = true;
         }
     }
@@ -323,4 +397,13 @@ void cfg_mqtt_handle(const char *json, const char *local_dev)
     publish_cfg_state(local_dev, corr_id, "OK", NULL);
     ESP_LOGI(TAG, "full config applied: relays=%d pwm=%d inputs=%d",
             tmp.relay_count, tmp.pwm_count, tmp.input_count);
+    
+    cfg_emit_hello_now(&tmp);
+
+    if (name_changed) {
+    ESP_LOGI(TAG, "Device name changed '%s' -> '%s' → rebooting to apply MQTT/mesh topics",
+                old_name, tmp.dev_name);
+        vTaskDelay(pdMS_TO_TICKS(300));
+        esp_restart();
+    }
 }

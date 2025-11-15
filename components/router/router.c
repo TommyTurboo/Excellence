@@ -7,6 +7,7 @@
 #include "cJSON.h"
 #include "parser.h"
 #include <strings.h>   // strcasecmp
+#include "esp_log.h"
 
 static router_cbs_t CB;
 static char g_local_dev[32] = "ESP32_ROOT"; // pas evt. aan jouw lengte aan
@@ -17,6 +18,24 @@ static uint32_t corr_id_u32(const char *s){
     if (!s) return h;
     for (; *s; s++){ h ^= (uint8_t)*s; h *= 16777619u; }
     return h;
+}
+
+// --- HELLO detectie ---
+static inline bool json_is_hello(const cJSON *p){
+    if (!p) return false;
+    const cJSON *t = cJSON_GetObjectItemCaseSensitive(p, "type");
+    if (cJSON_IsString(t) && t->valuestring &&
+        strcasecmp(t->valuestring, "HELLO")==0) return true;
+    const cJSON *h = cJSON_GetObjectItemCaseSensitive(p, "hello");
+    return (cJSON_IsBool(h) && cJSON_IsTrue(h));
+}
+
+static void publish_status_for(const char *dev, bool online){
+    char topic[128], payload[160];
+    snprintf(topic, sizeof(topic), "Devices/%s/Status", dev);
+    if (online) snprintf(payload, sizeof(payload), "{\"status\":\"online\",\"dev\":\"%s\"}", dev);
+    else        snprintf(payload, sizeof(payload), "{\"status\":\"offline\"}");
+    mqtt_link_publish(topic, payload, 1, true);  // retain
 }
 
 // helper: mapping parser → mesh_kind_t
@@ -268,6 +287,25 @@ void router_handle_mesh_request(const mesh_envelope_t *req){
 
 // 2b) Root: ontvangen EVENT → publiceer naar juiste State-topic
 void router_handle_mesh_event(const mesh_envelope_t *evt){
+
+    // 1) HELLO van child? -> Status=online (retain) + Info (retain)
+    bool is_hello = (evt->kind == ML_KIND_DIAG) && json_is_hello(evt->payload);
+
+    ESP_LOGI("router", "EVENT kind=%d from=%s", (int)evt->kind,
+             evt->src_dev ? evt->src_dev : "(null)");
+
+    if (is_hello){
+        ESP_LOGI("router", "HELLO from %s -> publish Status/Info", evt->src_dev);
+        publish_status_for(evt->src_dev, true);               // online (retain)
+        char tinfo[160];
+        snprintf(tinfo, sizeof(tinfo), "Devices/%s/Info", evt->src_dev);
+        char *js = cJSON_PrintUnformatted(evt->payload);
+        mqtt_link_publish(tinfo, js, 1, true);                // retain
+        free(js);
+        return;
+    }
+
+    // 2) default: publiceer naar State (niet-retained)
     char topic[160];
     if (evt->origin_set_topic && *evt->origin_set_topic)
         derive_state_topic(evt->origin_set_topic, topic, sizeof topic);

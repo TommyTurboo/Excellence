@@ -11,6 +11,8 @@ extern "C" {
 // Doet: JSON → cfg_t vullen → NVS opslaan → drivers herstarten → ACK/ERROR publish.
 void cfg_mqtt_handle(const char *json, const char *local_dev);
 
+void cfg_publish_hello_now(void);
+
 #ifdef __cplusplus
 }
 #endif

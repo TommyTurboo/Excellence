@@ -32,6 +32,8 @@ extern "C" {
 typedef void (*mqtt_parser_entry_cb)(const char *json, const char *topic);
 typedef void (*mqtt_config_entry_cb)(const char *json, const char *topic);
 typedef uint64_t (*mqtt_now_ms_cb)(void);
+typedef void (*mqtt_rx_cb)(const char *topic, const char *payload);
+typedef void (*mqtt_rx_cb)(const char *topic, const char *payload);
 
 // Context / settings
 typedef struct {
@@ -70,6 +72,7 @@ typedef struct {
 // API
 void mqtt_link_init(const mqtt_ctx_t *ctx, const mqtt_cbs_t *cbs);
 bool mqtt_link_connected(void);
+void mqtt_link_shutdown(void);   // stop client en maak resources vrij
 
 // Publish vanuit Router (QoS1). Retourneert true als geaccepteerd (direct of queued).
 bool mqtt_link_publish(const char *topic, const char *payload, int qos, bool retain);
@@ -78,6 +81,11 @@ void mqtt_link_publish_cb(const char *topic, const char *payload, int qos, bool 
 // Handige wrapper met dezelfde signatuur als Router’s callback (void)
 // → je kan deze rechtstreeks aan router_cbs_t.mqtt_pub hangen.
 void mqtt_link_publish_cb(const char *topic, const char *payload, int qos, bool retain);
+
+void mesh_diag_publish_status(const char *dev, bool online);
+
+// Extra subscribe met wildcard en RX-callback; (re)subscribe gebeurt op connect.
+bool mqtt_link_subscribe_extra(const char *topic, int qos, mqtt_rx_cb cb);
 
 #ifdef __cplusplus
 }

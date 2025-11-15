@@ -200,12 +200,15 @@ typedef struct {
     const char* (*name)(void);
     void (*init)(const mesh_opts_t*);
     void (*register_rx)(mesh_request_cb_t, mesh_event_cb_t);
+    void (*register_root)(mesh_root_cb_t);
     mesh_status_t (*request)(const mesh_envelope_t*, uint32_t);
     mesh_status_t (*send_event)(const mesh_envelope_t*);
     cJSON* (*snapshot)(void);
 } ml_backend_t;
 
+static void register_root(mesh_root_cb_t cb){ (void)cb; /* mailbox-backend meldt geen root-wissels */ }
+
 const ml_backend_t* ml_backend_mailbox(void){
-    static const ml_backend_t V = { name_backend, init, register_rx, request, send_event, snapshot };
+    static const ml_backend_t V = { name_backend, init, register_rx, register_root, request, send_event, snapshot };
     return &V;
 }

@@ -27,6 +27,8 @@ typedef struct {
 
 typedef void (*mesh_request_cb_t)(const mesh_envelope_t *req); // REQUEST rx
 typedef void (*mesh_event_cb_t)(const mesh_envelope_t *evt);   // EVENT rx
+// Callback voor root-status wijzigingen (auto-root)
+typedef void (*mesh_root_cb_t)(bool is_root);
 
 typedef struct {
     mesh_role_t role;
@@ -37,6 +39,7 @@ typedef struct {
 
 void        mesh_init(const mesh_opts_t *opts);
 void        mesh_register_rx(mesh_request_cb_t on_request, mesh_event_cb_t on_event);
+void        mesh_register_root_cb(mesh_root_cb_t cb);
 mesh_status_t mesh_request(const mesh_envelope_t *req, uint32_t timeout_ms); // wacht op RESPONSE-ACK
 mesh_status_t mesh_send_event(const mesh_envelope_t *evt);                   // fire & forget
 cJSON*      mesh_get_routing_snapshot(void);

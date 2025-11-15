@@ -17,6 +17,19 @@
 #include "input_ctrl.h"
 #include "cJSON.h"
 
+// --------------------------------------------------
+// Mesh/event helpers
+// --------------------------------------------------
+static inline uint32_t corr32(const char *s){
+    uint32_t h = 2166136261u; if (!s) return h;
+    for (; *s; s++){ h ^= (uint8_t)*s; h *= 16777619u; }
+    return h;
+}
+// Wordt gezet bij mesh-init; root publiceert zelf via router, child stuurt EVENTs upstream
+static bool s_is_root = false;   // auto-root: wordt gezet via mesh_root-callback
+static char s_local_dev[32] = MQTT_CLIENT_ID;
+static bool s_mqtt_started = false;
+
 // ---- Build-time secrets (met defaults) ----
 #ifndef WIFI_SSID
 #define WIFI_SSID ""
@@ -76,6 +89,36 @@ static void publish_parse_error(const parser_result_t *r, const char *local_dev)
 }
 
 // --------------------------------------------------
+// MQTT lifecycle (auto-root)
+// --------------------------------------------------
+static void on_cmd_set(const char *json, const char *topic); // fwd
+static void on_cfg_set(const char *json, const char *topic); // fwd
+
+static void start_mqtt_if_needed(void){
+    if (!s_is_root || s_mqtt_started) return;
+    if (!wifi_link_is_connected()) return;
+
+    mqtt_ctx_t m = (mqtt_ctx_t){0};
+    strlcpy(m.host, MQTT_HOST, sizeof m.host);
+    m.port = MQTT_PORT;
+    strlcpy(m.base_prefix, MQTT_BASE_PREFIX, sizeof m.base_prefix);
+    strlcpy(m.local_dev,  s_local_dev,      sizeof m.local_dev);
+    strlcpy(m.client_id,  s_local_dev,      sizeof m.client_id);
+    strlcpy(m.username,   MQTT_USER,        sizeof m.username);
+    strlcpy(m.password,   MQTT_PASS,        sizeof m.password);
+    m.is_root = true;
+    mqtt_cbs_t cbs = { .parser_entry=on_cmd_set, .config_set_entry=on_cfg_set, .now_ms=NULL };
+    mqtt_link_init(&m, &cbs);
+    s_mqtt_started = true;
+}
+
+static void stop_mqtt_if_running(void){
+    if (!s_mqtt_started) return;
+    mqtt_link_shutdown();
+    s_mqtt_started = false;
+}
+
+// --------------------------------------------------
 // Router exec-callbacks
 // --------------------------------------------------
 static const char *TAG_EXEC = "EXEC";
@@ -96,6 +139,16 @@ static router_status_t exec_relay(const parser_msg_t *m){
         relay_ctrl_set_autoff_seconds(m->io_id, sec);
     }
     ESP_LOGI(TAG_EXEC, "RELAY ch=%d -> %s", m->io_id, parser_action_str(m->action));
+    // Child: stuur EVENT na fysieke actie
+    if (!s_is_root) {
+        bool on = relay_ctrl_is_on(m->io_id);
+        cJSON *st = cJSON_CreateObject();
+        cJSON_AddStringToObject(st, "io", "relay");
+        cJSON_AddNumberToObject(st, "io_id", m->io_id);
+        cJSON_AddStringToObject(st, "state", on ? "ON" : "OFF");
+        router_emit_event(ML_KIND_RELAY, corr32(m->corr_id), m->topic_hint, st);
+        cJSON_Delete(st);
+    }
     return ROUTER_OK;
 }
 
@@ -117,6 +170,15 @@ static router_status_t exec_pwm(const parser_msg_t *m, int *applied_pct){
 
     if (applied_pct) *applied_pct = pct;
     ESP_LOGI(TAG_EXEC, "PWM ch=%d -> %d%%", m->io_id, pct);
+    // Child: stuur EVENT met toegepaste brightness
+    if (!s_is_root) {
+        cJSON *st = cJSON_CreateObject();
+        cJSON_AddStringToObject(st, "io", "pwm");
+        cJSON_AddNumberToObject(st, "io_id", m->io_id);
+        cJSON_AddNumberToObject(st, "brightness_pct", pct);
+        router_emit_event(ML_KIND_PWM, corr32(m->corr_id), m->topic_hint, st);
+        cJSON_Delete(st);
+    }
     return ROUTER_OK;
 }
 
@@ -127,6 +189,15 @@ static router_status_t exec_input(const parser_msg_t *m, int *value){
     bool lvl = input_ctrl_get_level(m->io_id);
     if (value) *value = lvl ? 1 : 0;
     ESP_LOGI(TAG_EXEC, "INPUT ch=%d -> %d", m->io_id, (int)lvl);
+    // Child: stuur EVENT voor READ-resultaat
+    if (!s_is_root && m->action == ACT_READ) {
+        cJSON *st = cJSON_CreateObject();
+        cJSON_AddStringToObject(st, "io", "input");
+        cJSON_AddNumberToObject(st, "io_id", m->io_id);
+        cJSON_AddNumberToObject(st, "value", lvl ? 1 : 0);
+        router_emit_event(ML_KIND_INPUT, corr32(m->corr_id), m->topic_hint, st);
+        cJSON_Delete(st);
+    }
     return ROUTER_OK;
 }
 
@@ -185,23 +256,23 @@ static void on_cfg_set(const char *json, const char *topic) {
 // --------------------------------------------------
 // Wi-Fi → MQTT boot
 // --------------------------------------------------
-static void on_down(void){ /* optioneel: mqtt cleanup/notify */ }
+static void on_down(void){
+    // STA-uplink weg: stop MQTT indien actief om reconnect-loops te vermijden
+    stop_mqtt_if_running();
+}
 
 static void on_ip(void){
-    mqtt_ctx_t m = {0};
-    strlcpy(m.host, MQTT_HOST, sizeof m.host);
-    m.port = MQTT_PORT;
-    strlcpy(m.base_prefix, MQTT_BASE_PREFIX, sizeof m.base_prefix);
-    strlcpy(m.local_dev,  MQTT_CLIENT_ID,   sizeof m.local_dev);
-    strlcpy(m.client_id,  MQTT_CLIENT_ID,   sizeof m.client_id);
-    strlcpy(m.username,   MQTT_USER,        sizeof m.username);
-    strlcpy(m.password,   MQTT_PASS,        sizeof m.password);
-    m.is_root = true;  // root: +/Cmd/Set & +/Config/Set; node: zet false
-    mqtt_cbs_t cbs = { .parser_entry=on_cmd_set, .config_set_entry=on_cfg_set, .now_ms=NULL };
-    mqtt_link_init(&m, &cbs);
-
-    hook_router_init(MQTT_CLIENT_ID);
+    // init router callbacks
+    hook_router_init(s_local_dev);
+    start_mqtt_if_needed();
 }
+
+static void on_mesh_root(bool is_root){
+    s_is_root = is_root;
+    if (is_root) start_mqtt_if_needed();
+    else         stop_mqtt_if_running();
+}
+
 
 // --------------------------------------------------
 // app_main
@@ -210,6 +281,10 @@ void app_main(void){
     // 1) Config + NVS
     ESP_ERROR_CHECK(config_init());
     const cfg_t *cfg = config_get_cached();
+    // stel lokale naam in uit config
+    if (cfg && cfg->dev_name[0]) {
+        strlcpy(s_local_dev, cfg->dev_name, sizeof s_local_dev);
+    }
 
     // 2) Drivers init met config
     relay_ctrl_init(cfg->relay_gpio, cfg->relay_count,
@@ -235,6 +310,18 @@ void app_main(void){
     wifi_cbs_t cb = { .on_got_ip = on_ip, .on_disconnected = on_down };
     wifi_link_init(&w, &cb);
     wifi_link_start();
+
+    // 4) Mesh init (na Wi‑Fi start) – auto-root: altijd als CHILD joinen
+    mesh_register_rx(router_handle_mesh_request, router_handle_mesh_event);
+    mesh_register_root_cb(on_mesh_root);
+
+    mesh_opts_t mo = {
+        .role = MESH_ROLE_CHILD,          // hint voor jouw app-logica; driver kiest nog steeds de echte rol
+        .local_dev = s_local_dev,
+        .default_timeout_ms = 1000,
+        .default_ttl = 3
+    };
+    mesh_init(&mo);
 }
 
 
