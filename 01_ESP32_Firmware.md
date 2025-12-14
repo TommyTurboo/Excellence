@@ -119,19 +119,128 @@ const char* mesh_get_parent_name(void);        // Device name van parent (NULL i
 int mesh_get_layer(void);                       // 0=root, 1=first hop, etc.
 ```
 
+**ESP-IDF API Referentie (v5.4+):**
+- [ESP-WIFI-MESH Programming Guide](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/network/esp-wifi-mesh.html)
+- Functies: `esp_mesh_get_parent_bssid()`, `esp_mesh_get_layer()`
+
+**Implementatie:**
+
+**1. Layer Tracking via Event (AANBEVOLEN):**
+```c
+// Beste methode: gebruik MESH_EVENT_PARENT_CONNECTED event data
+static void espmesh_event_handler(void *arg, esp_event_base_t base,
+                                    int32_t id, void *data) {
+    switch (id) {
+        case MESH_EVENT_PARENT_CONNECTED: {
+            mesh_event_connected_t *ev = (mesh_event_connected_t *)data;
+            C.current_layer = ev->self_layer;  // Direct uit event!
+            C.is_connected_to_parent = true;
+            ESP_LOGI(TAG, "Parent connected, layer=%d", C.current_layer);
+            break;
+        }
+        case MESH_EVENT_LAYER_CHANGE: {
+            mesh_event_layer_change_t *ev = (mesh_event_layer_change_t *)data;
+            int old_layer = C.current_layer;
+            C.current_layer = ev->new_layer;
+            ESP_LOGI(TAG, "Layer changed: %d -> %d", old_layer, C.current_layer);
+            if (s_topology_cb.on_layer_changed) {
+                s_topology_cb.on_layer_changed();
+            }
+            break;
+        }
+        case MESH_EVENT_PARENT_DISCONNECTED: {
+            C.is_connected_to_parent = false;
+            C.current_layer = -1;  // Reset
+            ESP_LOGW(TAG, "Parent disconnected");
+            break;
+        }
+    }
+}
+
+int mesh_get_layer(void) {
+    // Primair: gebruik cached waarde uit event
+    if (C.current_layer >= 0) {
+        return C.current_layer;
+    }
+
+    // Fallback: query ESP-IDF (alleen na PARENT_CONNECTED!)
+    if (C.is_connected_to_parent) {
+        return esp_mesh_get_layer();
+    }
+
+    return -1;  // Niet verbonden, layer onbekend
+}
+```
+
+**2. Parent BSSID → Device Name:**
+```c
+const char* mesh_get_parent_name(void) {
+    if (esp_mesh_is_root()) {
+        return NULL;  // Root heeft geen parent
+    }
+
+    if (!C.is_connected_to_parent) {
+        return NULL;  // Niet verbonden
+    }
+
+    // Haal parent BSSID op via ESP-IDF
+    mesh_addr_t parent_bssid;
+    esp_err_t err = esp_mesh_get_parent_bssid(&parent_bssid);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "esp_mesh_get_parent_bssid failed: %d", err);
+        return NULL;
+    }
+
+    // Lookup device name via peer cache
+    int idx = peer_find_by_mac_unsafe(&parent_bssid);
+    if (idx >= 0 && C.peers[idx].valid) {
+        return C.peers[idx].name;
+    }
+
+    // Fallback: return MAC adres als string (hex format)
+    static char mac_str[18];
+    snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X",
+             parent_bssid.addr[0], parent_bssid.addr[1], parent_bssid.addr[2],
+             parent_bssid.addr[3], parent_bssid.addr[4], parent_bssid.addr[5]);
+    return mac_str;
+}
+```
+
+**Context struct uitbreiding:**
+```c
+typedef struct {
+    // ... bestaande velden ...
+    int current_layer;              // -1 = onbekend, 0 = root, 1+ = child
+    bool is_connected_to_parent;    // Via MESH_EVENT_PARENT_CONNECTED
+} ctx_t;
+```
+
 **Nieuwe event callbacks:**
 ```c
 typedef void (*mesh_topology_cb_t)(void);
+
+typedef struct {
+    mesh_topology_cb_t on_layer_changed;
+    mesh_topology_cb_t on_parent_changed;
+} topology_callbacks_t;
 
 void mesh_register_topology_cb(mesh_topology_cb_t on_layer_changed,
                                  mesh_topology_cb_t on_parent_changed);
 ```
 
-**Implementatie:**
-- Gebruik ESP-IDF `esp_mesh_get_parent_bsid()` voor parent MAC
-- Lookup parent device name via routing table
-- Detect layer/parent changes in mesh event handlers
-- Trigger callback → status broadcast
+**BELANGRIJK - Timing:**
+- `esp_mesh_get_parent_bssid()` mag **alleen** na `MESH_EVENT_PARENT_CONNECTED`
+- `esp_mesh_get_layer()` mag **alleen** na `MESH_EVENT_PARENT_CONNECTED`
+- Bij `MESH_EVENT_PARENT_DISCONNECTED`: reset cached waarden
+
+**Foutscenario's:**
+
+| Scenario | mesh_get_layer() | mesh_get_parent_name() |
+|----------|------------------|------------------------|
+| Root node | 0 | NULL |
+| Child, verbonden | 1+ (uit event/cache) | Parent naam of MAC |
+| Child, niet verbonden | -1 | NULL |
+| Boot (voor PARENT_CONNECTED) | -1 | NULL |
 
 ---
 
@@ -569,6 +678,128 @@ static void on_mesh_root(bool is_root) {
 **MQTT Traffic:**
 - Status: 50 nodes × ~200 bytes × 1/30Hz = ~330 bytes/sec
 - Acceptable voor lokale MQTT broker
+
+## ESP-IDF API Verificatie & Best Practices
+
+### Versie Verificatie
+**Huidige ESP-IDF versie:** 5.4.0 (zie sdkconfig.esp32dev)
+
+**Bij twijfel over API functies:**
+1. Check officiële documentatie: [ESP-IDF Stable Docs](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/network/esp-wifi-mesh.html)
+2. Zoek in ESP-IDF header: `~/.platformio/packages/framework-espidf/components/esp_wifi/include/esp_mesh.h`
+3. Verify via grep:
+   ```bash
+   grep -r "esp_mesh_get_parent_bssid" ~/.platformio/packages/framework-espidf/
+   ```
+
+### API Usage Best Practices
+
+**1. Event-Driven API Calls**
+
+✓ **GOED:**
+```c
+case MESH_EVENT_PARENT_CONNECTED:
+    // Nu mag je parent info ophalen
+    mesh_addr_t parent;
+    esp_mesh_get_parent_bssid(&parent);
+    int layer = esp_mesh_get_layer();
+    break;
+```
+
+✗ **FOUT:**
+```c
+void app_main(void) {
+    esp_mesh_init();
+    // FOUT: parent info nog niet beschikbaar!
+    int layer = esp_mesh_get_layer();  // Undefined behavior
+}
+```
+
+**2. Error Handling**
+
+✓ **GOED:**
+```c
+mesh_addr_t parent;
+esp_err_t err = esp_mesh_get_parent_bssid(&parent);
+if (err != ESP_OK) {
+    ESP_LOGW(TAG, "Parent BSSID unavailable: %d", err);
+    return NULL;
+}
+```
+
+✗ **FOUT:**
+```c
+mesh_addr_t parent;
+esp_mesh_get_parent_bssid(&parent);  // Geen error check!
+// Gebruik parent... (kan invalid data zijn)
+```
+
+**3. Cache Event Data**
+
+✓ **GOED (efficient):**
+```c
+// Layer uit event data halen en cachen
+case MESH_EVENT_PARENT_CONNECTED:
+    C.current_layer = ((mesh_event_connected_t*)data)->self_layer;
+    break;
+
+int mesh_get_layer(void) {
+    return C.current_layer;  // Geen API call nodig!
+}
+```
+
+✗ **MINDER GOED (overhead):**
+```c
+int mesh_get_layer(void) {
+    return esp_mesh_get_layer();  // API call elke keer
+}
+```
+
+**4. Documentatie Links Actueel Houden**
+- Link altijd naar `/stable/` of specifieke versie (`/v5.4/`)
+- Vermijd `/latest/` (kan veranderen zonder notice)
+- Update links bij ESP-IDF upgrade
+
+**5. Deprecated Functies Detecteren**
+
+Bij ESP-IDF upgrade:
+```bash
+# Check compile warnings voor deprecated API
+pio run 2>&1 | grep -i "deprecated"
+
+# Check ESP-IDF migration guide
+# https://docs.espressif.com/projects/esp-idf/en/stable/esp32/migration-guides/
+```
+
+### API Verificatie Checklist
+
+Voordat je ESP-IDF API functies gebruikt:
+- [ ] Check functie bestaat in huidige ESP-IDF versie
+- [ ] Lees timing requirements (na welk event?)
+- [ ] Implementeer error handling (check return values)
+- [ ] Test foutscenario's (disconnect, boot, etc.)
+- [ ] Link naar officiële documentatie in code comments
+
+### ESP-IDF Mesh API Overzicht (v5.4+)
+
+**Veelgebruikt & Geverifieerd:**
+| Functie | Timing | Return Type | Notities |
+|---------|--------|-------------|----------|
+| `esp_mesh_is_root()` | Altijd | bool | Safe om altijd te callen |
+| `esp_mesh_get_layer()` | Na PARENT_CONNECTED | int | Return value = layer |
+| `esp_mesh_get_parent_bssid()` | Na PARENT_CONNECTED | esp_err_t | Check ESP_OK |
+| `esp_mesh_get_routing_table()` | Altijd (root) | esp_err_t | Alleen voor root |
+| `esp_mesh_send()` | Na mesh start | esp_err_t | Check ESP_OK |
+| `esp_mesh_recv()` | Na mesh start | esp_err_t | Blocking call |
+
+**Events (MESH_EVENT):**
+| Event | Data Struct | Trigger |
+|-------|-------------|---------|
+| `PARENT_CONNECTED` | `mesh_event_connected_t` | Parent verbonden, bevat self_layer |
+| `PARENT_DISCONNECTED` | `mesh_event_disconnected_t` | Parent verloren |
+| `LAYER_CHANGE` | `mesh_event_layer_change_t` | Layer veranderd, bevat new_layer |
+| `ROOT_ADDRESS` | `mesh_event_root_address_t` | Root MAC bekend |
+| `ROUTING_TABLE_ADD/REMOVE` | `mesh_event_routing_table_change_t` | Routing wijziging |
 
 ## Toekomstige Uitbreidingen
 

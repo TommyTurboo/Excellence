@@ -187,6 +187,9 @@ Project Excellence is een gedistribueerd home automation systeem gebaseerd op ES
 ## Betrouwbaarheid
 
 ### ESP32 Nodes
+- **ESP-IDF versie**: 5.4.0 (stable)
+- **Mesh API**: Event-driven (MESH_EVENT_PARENT_CONNECTED vereist voor parent/layer info)
+- **API documentatie**: [ESP-WIFI-MESH v5.4+](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/network/esp-wifi-mesh.html)
 - **Watchdog timers** voor kritische actuatoren
 - **Mesh auto-healing** bij node failures
 - **Offline detectie** via status broadcasts (90s timeout)
